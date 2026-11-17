@@ -74,6 +74,12 @@ pub trait Dialect: Send + Sync {
         ast::DataType::Double(ast::ExactNumberInfo::None)
     }
 
+    /// Does the dialect use a type other than FLOAT to represent Float32?
+    /// E.g. BigQuery uses FLOAT64 because it has no FLOAT type
+    fn float32_ast_dtype(&self) -> ast::DataType {
+        ast::DataType::Float(ast::ExactNumberInfo::None)
+    }
+
     /// The SQL type to use for Arrow Utf8 unparsing
     /// Most dialects use VARCHAR, but some, like MySQL, require CHAR
     fn utf8_cast_dtype(&self) -> ast::DataType {
@@ -810,6 +816,10 @@ impl Dialect for BigQueryDialect {
         ast::DataType::Float64
     }
 
+    fn float32_ast_dtype(&self) -> ast::DataType {
+        ast::DataType::Float64
+    }
+
     fn utf8_cast_dtype(&self) -> ast::DataType {
         ast::DataType::String(None)
     }
@@ -918,6 +928,7 @@ pub struct CustomDialect {
     supports_nulls_first_in_sort: bool,
     use_timestamp_for_date64: bool,
     interval_style: IntervalStyle,
+    float32_ast_dtype: ast::DataType,
     float64_ast_dtype: ast::DataType,
     utf8_cast_dtype: ast::DataType,
     large_utf8_cast_dtype: ast::DataType,
@@ -950,6 +961,7 @@ impl Default for CustomDialect {
             supports_nulls_first_in_sort: true,
             use_timestamp_for_date64: false,
             interval_style: IntervalStyle::SQLStandard,
+            float32_ast_dtype: ast::DataType::Float(ast::ExactNumberInfo::None),
             float64_ast_dtype: ast::DataType::Double(ast::ExactNumberInfo::None),
             utf8_cast_dtype: ast::DataType::Varchar(None),
             large_utf8_cast_dtype: ast::DataType::Text,
@@ -995,6 +1007,10 @@ impl Dialect for CustomDialect {
 
     fn interval_style(&self) -> IntervalStyle {
         self.interval_style
+    }
+
+    fn float32_ast_dtype(&self) -> ast::DataType {
+        self.float32_ast_dtype.clone()
     }
 
     fn float64_ast_dtype(&self) -> ast::DataType {
@@ -1135,6 +1151,7 @@ pub struct CustomDialectBuilder {
     supports_nulls_first_in_sort: bool,
     use_timestamp_for_date64: bool,
     interval_style: IntervalStyle,
+    float32_ast_dtype: ast::DataType,
     float64_ast_dtype: ast::DataType,
     utf8_cast_dtype: ast::DataType,
     large_utf8_cast_dtype: ast::DataType,
@@ -1173,6 +1190,7 @@ impl CustomDialectBuilder {
             supports_nulls_first_in_sort: true,
             use_timestamp_for_date64: false,
             interval_style: IntervalStyle::PostgresVerbose,
+            float32_ast_dtype: ast::DataType::Float(ast::ExactNumberInfo::None),
             float64_ast_dtype: ast::DataType::Double(ast::ExactNumberInfo::None),
             utf8_cast_dtype: ast::DataType::Varchar(None),
             large_utf8_cast_dtype: ast::DataType::Text,
@@ -1208,6 +1226,7 @@ impl CustomDialectBuilder {
             supports_nulls_first_in_sort: self.supports_nulls_first_in_sort,
             use_timestamp_for_date64: self.use_timestamp_for_date64,
             interval_style: self.interval_style,
+            float32_ast_dtype: self.float32_ast_dtype,
             float64_ast_dtype: self.float64_ast_dtype,
             utf8_cast_dtype: self.utf8_cast_dtype,
             large_utf8_cast_dtype: self.large_utf8_cast_dtype,
@@ -1283,6 +1302,12 @@ impl CustomDialectBuilder {
     /// Customize the dialect with a specific SQL type for Float64 casting: DOUBLE, DOUBLE PRECISION, etc.
     pub fn with_float64_ast_dtype(mut self, float64_ast_dtype: ast::DataType) -> Self {
         self.float64_ast_dtype = float64_ast_dtype;
+        self
+    }
+
+    /// Customize the dialect with a specific SQL type for Float32 casting: FLOAT, REAL, etc.
+    pub fn with_float32_ast_dtype(mut self, float32_ast_dtype: ast::DataType) -> Self {
+        self.float32_ast_dtype = float32_ast_dtype;
         self
     }
 

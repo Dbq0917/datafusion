@@ -1864,7 +1864,7 @@ impl Unparser<'_> {
             DataType::Float16 => {
                 not_impl_err!("Unsupported DataType: conversion: {data_type}")
             }
-            DataType::Float32 => Ok(ast::DataType::Float(ast::ExactNumberInfo::None)),
+            DataType::Float32 => Ok(self.dialect.float32_ast_dtype()),
             DataType::Float64 => Ok(self.dialect.float64_ast_dtype()),
             DataType::Timestamp(time_unit, tz) => {
                 Ok(self.dialect.timestamp_cast_dtype(time_unit, tz))
@@ -2620,6 +2620,35 @@ mod tests {
             let actual = format!("{ast}");
 
             let expected = format!(r#"CAST(a AS {identifier})"#);
+            assert_eq!(actual, expected);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn float32_ast_dtype_by_dialect() -> Result<()> {
+        let dialects: Vec<(Arc<dyn Dialect>, &str)> = vec![
+            (Arc::new(DefaultDialect {}), "CAST(a AS FLOAT)"),
+            (Arc::new(PostgreSqlDialect {}), "CAST(\"a\" AS FLOAT)"),
+            (Arc::new(DuckDBDialect::new()), "CAST(\"a\" AS FLOAT)"),
+            (Arc::new(MySqlDialect {}), "CAST(`a` AS FLOAT)"),
+            (Arc::new(SqliteDialect {}), "CAST(`a` AS FLOAT)"),
+            (Arc::new(BigQueryDialect::new()), "CAST(`a` AS FLOAT64)"),
+            (Arc::new(SnowflakeDialect::new()), "CAST(\"a\" AS FLOAT)"),
+            (
+                Arc::new(
+                    CustomDialectBuilder::new()
+                        .with_float32_ast_dtype(ast::DataType::Real)
+                        .build(),
+                ),
+                "CAST(a AS REAL)",
+            ),
+        ];
+
+        let expr = cast(col("a"), DataType::Float32);
+        for (dialect, expected) in dialects {
+            let actual =
+                format!("{}", Unparser::new(dialect.as_ref()).expr_to_sql(&expr)?);
             assert_eq!(actual, expected);
         }
         Ok(())
@@ -4124,6 +4153,15 @@ mod tests {
         let expr = cast(col("a"), DataType::Float64);
         let actual = format!("{}", unparser.expr_to_sql(&expr)?);
         assert_eq!(actual, "CAST(`a` AS FLOAT64)");
+
+        // float32_ast_dtype: FLOAT64 instead of FLOAT
+        let expr = cast(col("a"), DataType::Float32);
+        let actual = format!("{}", unparser.expr_to_sql(&expr)?);
+        assert_eq!(actual, "CAST(`a` AS FLOAT64)");
+
+        // Non-finite Float32 literals use the same accepted BigQuery type.
+        let actual = format!("{}", unparser.expr_to_sql(&lit(f32::INFINITY))?);
+        assert_eq!(actual, "CAST('Infinity' AS FLOAT64)");
 
         // supports_column_alias_in_table_alias: false
         assert!(!bigquery_dialect.supports_column_alias_in_table_alias());
